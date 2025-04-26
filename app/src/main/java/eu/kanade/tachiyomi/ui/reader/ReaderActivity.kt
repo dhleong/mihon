@@ -89,6 +89,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.feature.ocr.OcrProgressModal
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -232,6 +233,9 @@ class ReaderActivity : BaseActivity() {
                     }
                     is ReaderViewModel.Event.SetCoverResult -> {
                         onSetAsCoverResult(event.result)
+                    }
+                    is ReaderViewModel.Event.LaunchIntent -> {
+                        startActivity(event.intent)
                     }
                 }
             }
@@ -426,6 +430,14 @@ class ReaderActivity : BaseActivity() {
             if (flashOnPageChange) {
                 DisplayRefreshHost(
                     hostState = displayRefreshHost,
+                )
+            }
+
+            state.ocr?.let { ocr ->
+                OcrProgressModal(
+                    onDismissRequest = viewModel::dismissOcr,
+                    text = ocr.text,
+                    isLoading = ocr is ReaderViewModel.OcrState.Partial,
                 )
             }
 
