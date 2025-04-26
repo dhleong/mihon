@@ -108,6 +108,8 @@ markdown-coil = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3",
 
 stringSimilarity = { module = "com.aallam.similarity:string-similarity-kotlin", version = "0.1.0" }
 
+manga-ocr = { module = "com.github.dhleong:manga-ocr-android", version = "main-SNAPSHOT" }
+
 [plugins]
 google-services = { id = "com.google.gms.google-services", version = "4.4.3" }
 aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlib_version" }
@@ -116,12 +118,26 @@ moko = { id = "dev.icerock.mobile.multiplatform-resources", version.ref = "moko"
 firebase-crashlytics = { id = "com.google.firebase.crashlytics", version = "3.0.5" }
 
 [bundles]
-okhttp = ["okhttp-core", "okhttp-logging", "okhttp-brotli", "okhttp-dnsoverhttps"]
+okhttp = [
+  "okhttp-core",
+  "okhttp-logging",
+  "okhttp-brotli",
+  "okhttp-dnsoverhttps",
+]
 js-engine = ["quickjs-android"]
 sqlite = ["sqlite-framework", "sqlite-ktx", "sqlite-android"]
 coil = ["coil-core", "coil-gif", "coil-compose", "coil-network-okhttp"]
 shizuku = ["shizuku-api", "shizuku-provider"]
-sqldelight = ["sqldelight-android-driver", "sqldelight-coroutines", "sqldelight-android-paging"]
-voyager = ["voyager-navigator", "voyager-screenmodel", "voyager-tab-navigator", "voyager-transitions"]
+sqldelight = [
+  "sqldelight-android-driver",
+  "sqldelight-coroutines",
+  "sqldelight-android-paging",
+]
+voyager = [
+  "voyager-navigator",
+  "voyager-screenmodel",
+  "voyager-tab-navigator",
+  "voyager-transitions",
+]
 test = ["junit-jupiter", "kotest-assertions", "mockk"]
 markdown = ["markdown-core", "markdown-coil"]

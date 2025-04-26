@@ -48,6 +48,9 @@ class PagerConfig(
     var landscapeZoom = false
         private set
 
+    var isHardwareBitmapEnabled = true
+        private set
+
     init {
         readerPreferences.readerTheme()
             .register(
@@ -72,6 +75,9 @@ class PagerConfig(
 
         readerPreferences.landscapeZoom()
             .register({ landscapeZoom = it }, { imagePropertyChangedListener?.invoke() })
+
+        // TODO: OCR preference
+        isHardwareBitmapEnabled = false
 
         readerPreferences.navigationModePager()
             .register({ navigationMode = it }, { updateNavigation(navigationMode) })
