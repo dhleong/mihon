@@ -9,9 +9,11 @@ import android.view.ViewGroup.LayoutParams
 import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
@@ -21,6 +23,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import mihon.feature.ocr.TextDetector
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.injectLazy
 import kotlin.math.min
@@ -61,6 +64,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * or dragging, there'd be a noticeable and annoying jump.
      */
     private var awaitingIdleViewerChapters: ViewerChapters? = null
+    private var awaitingIdleSource: Source? = null
 
     /**
      * Whether the view pager is currently in idle mode. It sets the awaiting chapters if setting
@@ -71,8 +75,9 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             field = value
             if (value) {
                 awaitingIdleViewerChapters?.let { viewerChapters ->
-                    setChaptersInternal(viewerChapters)
+                    setChaptersInternal(requireNotNull(awaitingIdleSource), viewerChapters)
                     awaitingIdleViewerChapters = null
+                    awaitingIdleSource = null
                     if (viewerChapters.currChapter.pages?.size == 1) {
                         adapter.nextTransition?.to?.let(activity::requestPreloadChapter)
                     }
@@ -93,6 +98,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         }
     }
 
+    private val textDetector = TextDetector(activity, activity.lifecycleScope, activity.lifecycle)
+
     init {
         pager.isVisible = false // Don't layout the pager yet
         pager.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
@@ -101,7 +108,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         pager.id = R.id.reader_pager
         pager.adapter = adapter
         pager.addOnPageChangeListener(pagerListener)
-        pager.tapListener = { event ->
+        pager.tapListener = f@{ event ->
+            val currentView = pager.children.first { adapter.getItemPosition(it) == pager.currentItem }
+            if (textDetector.detectText(currentView, event.x, event.y)) {
+                return@f
+            }
             val viewPosition = IntArray(2)
             pager.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)
@@ -196,6 +207,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 is ReaderPage -> onReaderPageSelected(page, allowPreload, forward)
                 is ChapterTransition -> onTransitionSelected(page)
             }
+            // TODO: Trigger TextDetector to pre-scan next page (if allowPreload)
         }
     }
 
@@ -235,6 +247,10 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             return
         }
 
+        // NOTE: using the PagerHolder *might* be more precise than pager here, but it also may not
+        // always exist yet!
+        textDetector.onPageSelected(config, pager, page)
+
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
         if (inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
@@ -263,10 +279,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Tells this viewer to set the given [chapters] as active. If the pager is currently idle,
      * it sets the chapters immediately, otherwise they are saved and set when it becomes idle.
      */
-    override fun setChapters(chapters: ViewerChapters) {
+    override fun setChapters(source: Source, chapters: ViewerChapters) {
         if (isIdle) {
-            setChaptersInternal(chapters)
+            setChaptersInternal(source, chapters)
         } else {
+            awaitingIdleSource = source
             awaitingIdleViewerChapters = chapters
         }
     }
@@ -274,7 +291,9 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     /**
      * Sets the active [chapters] on this pager.
      */
-    private fun setChaptersInternal(chapters: ViewerChapters) {
+    private fun setChaptersInternal(source: Source, chapters: ViewerChapters) {
+        textDetector.setLanguage(source.lang)
+
         // Remove listener so the change in item doesn't trigger it
         pager.removeOnPageChangeListener(pagerListener)
 

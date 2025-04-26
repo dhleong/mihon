@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.annotation.IntRange
 import androidx.compose.runtime.Immutable
@@ -22,6 +23,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
@@ -56,6 +58,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
+import mihon.feature.ocr.RecognizedText
+import mihon.feature.ocr.TranslationIntent
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -105,6 +109,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
 ) : ViewModel() {
 
+    private var cancelOcr: (() -> Unit)? = null
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
 
@@ -285,16 +290,19 @@ class ReaderViewModel @JvmOverloads constructor(
     private suspend fun init() {
         withIOContext {
             try {
-                val manga = getManga.await(mangaId) ?: error("Requested manga of id $mangaId not found")
-                sourceManager.isInitialized.first { it }
-                mutableState.update { it.copy(manga = manga) }
-                if (chapterId == -1L) chapterId = initialChapterId
+                val manga = getManga.await(mangaId)
+                if (manga != null) {
+                    sourceManager.isInitialized.first { it }
+                    val source = sourceManager.getOrStub(manga.source)
 
-                val context = Injekt.get<Application>()
-                val source = sourceManager.getOrStub(manga.source)
-                loader = ChapterLoader(context, downloadManager, downloadProvider, manga, source)
+                    mutableState.update { it.copy(manga = manga, source = source) }
+                    if (chapterId == -1L) chapterId = initialChapterId
 
-                loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id })
+                    val context = Injekt.get<Application>()
+                    loader = ChapterLoader(context, downloadManager, downloadProvider, manga, source)
+
+                    loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id })
+                }
             } catch (e: Throwable) {
                 if (e is CancellationException) {
                     throw e
@@ -945,10 +953,38 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
+    fun updateDetectingText(text: RecognizedText, cancel: () -> Unit) {
+        cancelOcr = cancel
+        viewModelScope.launchNonCancellable {
+            mutableState.update { it.copy(ocr = OcrState.Partial(text)) }
+        }
+    }
+
+    fun finishDetectingText(text: RecognizedText) {
+        cancelOcr = null
+        viewModelScope.launchNonCancellable {
+            val context = Injekt.get<Application>()
+            val intent = TranslationIntent.resolve(context, text)
+            if (intent != null) {
+                eventChannel.send(Event.LaunchIntent(intent))
+                mutableState.update { it.copy(ocr = null) }
+            } else {
+                mutableState.update { it.copy(ocr = OcrState.Done(text)) }
+            }
+        }
+    }
+
+    fun dismissOcr() {
+        cancelOcr?.invoke()
+        cancelOcr = null
+        mutableState.update { it.copy(ocr = null) }
+    }
+
     @Immutable
     data class State(
         val manga: Manga? = null,
         val initError: Throwable? = null,
+        val source: Source? = null,
         val viewerChapters: ViewerChapters? = null,
         val bookmarked: Boolean = false,
         val isLoadingAdjacentChapter: Boolean = false,
@@ -959,6 +995,7 @@ class ReaderViewModel @JvmOverloads constructor(
          */
         val viewer: Viewer? = null,
         val dialog: Dialog? = null,
+        val ocr: OcrState? = null,
         val menuVisible: Boolean = false,
         @IntRange(from = -100, to = 100) val brightnessOverlayValue: Int = 0,
     ) {
@@ -967,6 +1004,13 @@ class ReaderViewModel @JvmOverloads constructor(
 
         val totalPages: Int
             get() = currentChapter?.pages?.size ?: -1
+    }
+
+    sealed interface OcrState {
+        val text: RecognizedText
+
+        data class Partial(override val text: RecognizedText) : OcrState
+        data class Done(override val text: RecognizedText) : OcrState
     }
 
     sealed interface Dialog {
@@ -986,5 +1030,7 @@ class ReaderViewModel @JvmOverloads constructor(
         data class SavedImage(val result: SaveImageResult) : Event
         data class ShareImage(val uri: Uri, val page: ReaderPage) : Event
         data class CopyImage(val uri: Uri) : Event
+
+        data class LaunchIntent(val intent: Intent) : Event
     }
 }

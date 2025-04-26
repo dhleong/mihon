@@ -94,6 +94,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.feature.ocr.OcrProgressModal
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -241,6 +242,9 @@ class ReaderActivity : BaseActivity() {
                     is ReaderViewModel.Event.SetCoverResult -> {
                         onSetAsCoverResult(event.result)
                     }
+                    is ReaderViewModel.Event.LaunchIntent -> {
+                        startActivity(event.intent)
+                    }
                 }
             }
             .launchIn(lifecycleScope)
@@ -271,6 +275,14 @@ class ReaderActivity : BaseActivity() {
             ContentOverlay(state = state)
 
             AppBars(state = state)
+
+            state.ocr?.let { ocr ->
+                OcrProgressModal(
+                    onDismissRequest = viewModel::dismissOcr,
+                    text = ocr.text,
+                    isLoading = ocr is ReaderViewModel.OcrState.Partial,
+                )
+            }
         }
 
         val onDismissRequest = viewModel::closeDialog
@@ -621,8 +633,9 @@ class ReaderActivity : BaseActivity() {
      */
     @SuppressLint("RestrictedApi")
     private fun setChapters(viewerChapters: ViewerChapters) {
+        val source = requireNotNull(viewModel.state.value.source)
         binding.readerContainer.removeView(loadingIndicator)
-        viewModel.state.value.viewer?.setChapters(viewerChapters)
+        viewModel.state.value.viewer?.setChapters(source, viewerChapters)
 
         lifecycleScope.launchIO {
             viewModel.getChapterUrl()?.let { url ->
