@@ -328,6 +328,8 @@ dependencies {
     implementation(libs.leakCanary.plumber)
 
     testImplementation(libs.kotlinx.coroutines.test)
+
+    implementation(libs.manga.ocr)
 }
 
 androidComponents {
