@@ -203,6 +203,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 is ReaderPage -> onReaderPageSelected(page, allowPreload, forward)
                 is ChapterTransition -> onTransitionSelected(page)
             }
+            // TODO: Trigger TextDetector to pre-scan next page (if allowPreload)
         }
     }
 
@@ -241,6 +242,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         if (page is InsertPage) {
             return
         }
+
+        textDetector.onPageSelected(page)
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
