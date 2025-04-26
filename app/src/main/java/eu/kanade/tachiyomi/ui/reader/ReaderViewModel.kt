@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.annotation.IntRange
 import androidx.compose.runtime.Immutable
@@ -56,6 +57,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
+import mihon.feature.ocr.RecognizedText
+import mihon.feature.ocr.TranslationIntent
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -946,6 +949,29 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
+    fun updateDetectingText(text: RecognizedText) {
+        viewModelScope.launchNonCancellable {
+            mutableState.update { it.copy(ocr = OcrState.Partial(text)) }
+        }
+    }
+
+    fun finishDetectingText(text: RecognizedText) {
+        viewModelScope.launchNonCancellable {
+            val context = Injekt.get<Application>()
+            val intent = TranslationIntent.resolve(context, text)
+            if (intent != null) {
+                eventChannel.send(Event.LaunchIntent(intent))
+                mutableState.update { it.copy(ocr = null) }
+            } else {
+                mutableState.update { it.copy(ocr = OcrState.Done(text)) }
+            }
+        }
+    }
+
+    fun dismissOcr() {
+
+    }
+
     @Immutable
     data class State(
         val manga: Manga? = null,
@@ -959,6 +985,7 @@ class ReaderViewModel @JvmOverloads constructor(
          */
         val viewer: Viewer? = null,
         val dialog: Dialog? = null,
+        val ocr: OcrState? = null,
         val menuVisible: Boolean = false,
         @IntRange(from = -100, to = 100) val brightnessOverlayValue: Int = 0,
     ) {
@@ -967,6 +994,13 @@ class ReaderViewModel @JvmOverloads constructor(
 
         val totalPages: Int
             get() = currentChapter?.pages?.size ?: -1
+    }
+
+    sealed interface OcrState {
+        val text: RecognizedText
+
+        data class Partial(override val text: RecognizedText) : OcrState
+        data class Done(override val text: RecognizedText) : OcrState
     }
 
     sealed interface Dialog {
@@ -986,5 +1020,7 @@ class ReaderViewModel @JvmOverloads constructor(
         data class SavedImage(val result: SaveImageResult) : Event
         data class ShareImage(val uri: Uri, val page: ReaderPage) : Event
         data class CopyImage(val uri: Uri) : Event
+
+        data class LaunchIntent(val intent: Intent) : Event
     }
 }

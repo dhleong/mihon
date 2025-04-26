@@ -1,26 +1,24 @@
 package mihon.feature.ocr
 
-import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
 import android.view.View
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleCoroutineScope
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
+import net.dhleong.mangaocr.MangaOcr
 import net.dhleong.mangaocr.MangaOcrManager
-import tachiyomi.presentation.core.components.material.AlertDialogContent
 
 class TextDetector(
-    context: Context,
+    activity: ReaderActivity,
     private val scope: LifecycleCoroutineScope,
     lifecycle: Lifecycle,
 ) {
-    private val ocr = MangaOcrManager(context, scope, lifecycle)
+    private val viewModel = activity.viewModel
+    private val ocr = MangaOcrManager(activity.applicationContext, scope, lifecycle)
     private val size = 200
     private val halfSize = size / 2
 
@@ -40,9 +38,26 @@ class TextDetector(
                 size.coerceAtMost(bitmap.height - dy)
             )
 
+            // Show progress right away
+            viewModel.updateDetectingText(RecognizedText(
+                text = "",
+                language = "jp"
+            ))
+
             ocr.process(croppedBitmap)
-                .collect {
-                    Log.v("OCR", "state=$it")
+                .collect { value ->
+                    when (value) {
+                        is MangaOcr.Result.Partial ->
+                            viewModel.updateDetectingText(RecognizedText(
+                                text = value.text.toString(),
+                                language = "jp"
+                            ))
+                        is MangaOcr.Result.FinalResult ->
+                            viewModel.finishDetectingText(RecognizedText(
+                                text = value.text,
+                                language = "jp"
+                            ))
+                    }
                 }
 
             croppedBitmap.recycle()
