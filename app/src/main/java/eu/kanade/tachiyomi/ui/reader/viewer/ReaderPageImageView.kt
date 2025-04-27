@@ -99,6 +99,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
         onViewClicked?.invoke()
     }
 
+    fun viewToSourceCoord(x: Float, y: Float): PointF? {
+        val view = pageView as? SubsamplingScaleImageView ?: return null
+        return view.viewToSourceCoord(x, y)
+    }
+
     open fun onPageSelected(forward: Boolean) {
         with(pageView as? SubsamplingScaleImageView) {
             if (this == null) return
