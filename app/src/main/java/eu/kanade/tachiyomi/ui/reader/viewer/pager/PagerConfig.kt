@@ -48,9 +48,6 @@ class PagerConfig(
     var landscapeZoom = false
         private set
 
-    var isHardwareBitmapEnabled = true
-        private set
-
     init {
         readerPreferences.readerTheme
             .register(
@@ -79,7 +76,7 @@ class PagerConfig(
         // TODO: OCR preference
         isHardwareBitmapEnabled = false
 
-        readerPreferences.navigationModePager
+        readerPreferences.navigationModePager()
             .register({ navigationMode = it }, { updateNavigation(navigationMode) })
 
         readerPreferences.pagerNavInverted
