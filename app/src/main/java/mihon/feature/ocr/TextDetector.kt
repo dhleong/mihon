@@ -3,7 +3,6 @@ package mihon.feature.ocr
 import android.graphics.Bitmap
 import android.util.Log
 import android.view.View
-import androidx.annotation.RequiresPermission
 import androidx.collection.LruCache
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.Lifecycle
@@ -14,12 +13,14 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import net.dhleong.mangaocr.Detector
 import net.dhleong.mangaocr.DetectorManager
@@ -34,38 +35,50 @@ class TextDetector(
     private val scope: LifecycleCoroutineScope,
     lifecycle: Lifecycle,
 ) {
+    private class PageState(
+        val bitmap: Bitmap,
+        val regions: List<Detector.Result>,
+    )
+
     private val context = activity.applicationContext
     private val viewModel = activity.viewModel
     private val ocr = MangaOcrManager(context, scope, lifecycle)
     private val detection = DetectorManager(context, scope, lifecycle)
-    private val size = 200
-    private val halfSize = size / 2
 
     private val job = SupervisorJob()
 
     private var currentPage: ReaderPage? = null
-    private val regions = LruCache<ReaderPage, List<Detector.Result>>(8)
+    private val states = LruCache<ReaderPage, PageState>(4)
 
-    fun detectText(view: View, x: Float, y: Float): Boolean {
-        val regions = regions[currentPage ?: return false] ?: return false
-        // TODO map x, y to the un-zoomed image coords
-        if (!regions.any { it.bbox.rect.contains(x, y) }) {
-            Log.v("TextDetector", "Tap ($x, $y)  of any regions")
+    fun detectText(view: View, viewX: Float, viewY: Float): Boolean {
+        var x = viewX
+        var y = viewY
+        if (view is ReaderPageImageView) {
+            // whooo hacks
+            val unscaled = view.viewToSourceCoord(viewX, viewY)
+            if (unscaled != null) {
+                x = unscaled.x
+                y = unscaled.y
+            }
+        }
+
+        val state = states[currentPage ?: return false] ?: return false
+        val region = state.regions.find { it.bbox.rect.contains(x, y) }
+        if (region == null) {
+            Log.v("TextDetector", "Tap ($x, $y) did not match any region")
             return false
         }
 
         Log.v("TextDetector", "Launching analysis at $x, $y")
-        val bitmap = view.drawToBitmap()
 
         job.cancelChildren()
         scope.launch(job) {
-            val dx = (x.toInt() - halfSize).coerceAtLeast(0)
-            val dy = (y.toInt() - halfSize).coerceAtLeast(0)
             val croppedBitmap = Bitmap.createBitmap(
-                bitmap,
-                dx, dy,
-                size.coerceAtMost(bitmap.width - dx),
-                size.coerceAtMost(bitmap.height - dy)
+                state.bitmap,
+                region.bbox.rect.left.toInt(),
+                region.bbox.rect.top.toInt(),
+                region.bbox.rect.width().toInt(),
+                region.bbox.rect.height().toInt(),
             )
 
             // Show progress right away
@@ -90,8 +103,9 @@ class TextDetector(
                     }
                 }
 
-            croppedBitmap.recycle()
-            bitmap.recycle()
+            if (croppedBitmap !== state.bitmap) {
+                croppedBitmap.recycle()
+            }
         }
         return true
     }
@@ -103,7 +117,7 @@ class TextDetector(
 
     fun scanPageForRegions(page: ReaderPage) {
         scope.launchUI {
-            val existing = regions[page]
+            val existing = states[page]
             Log.v("TextDetector", "onPageSelected ($page) existing = $existing")
             if (existing != null) {
                 return@launchUI
@@ -118,13 +132,13 @@ class TextDetector(
             Log.v("TextDetector", "Process $page...")
             val results = detection.process(bitmap)
             Log.v("TextDetector", "Got: $results")
-            regions.put(page, results)
+            states.put(page, PageState(bitmap, results))
         }
     }
 
     private suspend fun ReaderPage.loadBitmap(): Bitmap? {
         if (status != Page.State.Ready) {
-            statusFlow.first { it == Page.State.Ready }
+            statusFlow.firstOrNull { it == Page.State.Ready }
         }
 
         val stream = stream?.invoke()
@@ -146,6 +160,6 @@ class TextDetector(
                 return null
             }
         }
-        return image.toBitmap(1024, 1024)
+        return image.toBitmap()
     }
 }
