@@ -106,7 +106,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         pager.adapter = adapter
         pager.addOnPageChangeListener(pagerListener)
         pager.tapListener = f@{ event ->
-            if (textDetector.detectText(pager, event.x, event.y)) {
+            val currentView = pager.children.first { adapter.getItemPosition(it) == pager.currentItem }
+            if (textDetector.detectText(currentView, event.x, event.y)) {
                 return@f
             }
             val viewPosition = IntArray(2)
