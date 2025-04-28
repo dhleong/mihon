@@ -79,6 +79,9 @@ class TextDetector(
         Log.v("TextDetector", "Launching analysis at $x, $y")
 
         job.cancelChildren()
+
+        val cancel = { job.cancelChildren() }
+
         scope.launch(job) {
             val croppedBitmap = Bitmap.createBitmap(
                 state.bitmap,
@@ -92,7 +95,7 @@ class TextDetector(
             viewModel.updateDetectingText(RecognizedText(
                 text = "",
                 language = "jp"
-            ))
+            ), cancel)
 
             ocr.process(croppedBitmap)
                 .collect { value ->
@@ -101,7 +104,7 @@ class TextDetector(
                             viewModel.updateDetectingText(RecognizedText(
                                 text = value.text.toString(),
                                 language = "jp"
-                            ))
+                            ), cancel)
                         is MangaOcr.Result.FinalResult ->
                             viewModel.finishDetectingText(RecognizedText(
                                 text = value.text,
