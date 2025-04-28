@@ -108,6 +108,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
 ) : ViewModel() {
 
+    private var cancelOcr: (() -> Unit)? = null
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
 
@@ -948,13 +949,15 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
-    fun updateDetectingText(text: RecognizedText) {
+    fun updateDetectingText(text: RecognizedText, cancel: () -> Unit) {
+        cancelOcr = cancel
         viewModelScope.launchNonCancellable {
             mutableState.update { it.copy(ocr = OcrState.Partial(text)) }
         }
     }
 
     fun finishDetectingText(text: RecognizedText) {
+        cancelOcr = null
         viewModelScope.launchNonCancellable {
             val context = Injekt.get<Application>()
             val intent = TranslationIntent.resolve(context, text)
@@ -968,7 +971,9 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     fun dismissOcr() {
-
+        cancelOcr?.invoke()
+        cancelOcr = null
+        mutableState.update { it.copy(ocr = null) }
     }
 
     @Immutable
