@@ -244,7 +244,9 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             return
         }
 
-        textDetector.onPageSelected(page)
+        // NOTE: using the PagerHolder *might* be more precise than pager here, but it also may not
+        // always exist yet!
+        textDetector.onPageSelected(config, pager, page)
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
