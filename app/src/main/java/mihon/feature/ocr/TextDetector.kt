@@ -12,12 +12,18 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import coil3.request.crossfade
+import coil3.size.Precision
+import coil3.size.ViewSizeResolver
 import coil3.toBitmap
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+import eu.kanade.tachiyomi.data.coil.cropBorders
+import eu.kanade.tachiyomi.data.coil.customDecoder
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.firstOrNull
@@ -59,13 +65,14 @@ class TextDetector(
             if (unscaled != null) {
                 x = unscaled.x
                 y = unscaled.y
+                Log.v("TextDetector", "Translated tap ($viewX, $viewY) -> ($x, $y)")
             }
         }
 
         val state = states[currentPage ?: return false] ?: return false
         val region = state.regions.find { it.bbox.rect.contains(x, y) }
         if (region == null) {
-            Log.v("TextDetector", "Tap ($x, $y) did not match any region")
+            Log.v("TextDetector", "Tap ($x, $y) did not match any region in ${state.regions}")
             return false
         }
 
@@ -110,33 +117,34 @@ class TextDetector(
         return true
     }
 
-    fun onPageSelected(page: ReaderPage) {
+    fun onPageSelected(config: PagerConfig, view: View, page: ReaderPage) {
+        Log.v("TextDetector", "onPageSelected ($page / ${page.number})")
         currentPage = page
-        scanPageForRegions(page)
+        scanPageForRegions(config, view, page)
     }
 
-    fun scanPageForRegions(page: ReaderPage) {
+    fun scanPageForRegions(config: PagerConfig, view: View, page: ReaderPage) {
         scope.launchUI {
             val existing = states[page]
-            Log.v("TextDetector", "onPageSelected ($page) existing = $existing")
+            Log.v("TextDetector", "scanPageForRegions ($page / ${page.number}) existing = $existing")
             if (existing != null) {
                 return@launchUI
             }
 
-            val bitmap = page.loadBitmap()
+            val bitmap = page.loadBitmap(config, view)
             if (bitmap == null) {
                 Log.v("TextDetector", "Failed to load bitmap for $page")
                 return@launchUI
             }
 
-            Log.v("TextDetector", "Process $page...")
+            Log.v("TextDetector", "Process ($page / ${page.number}) @ ${bitmap.width} / ${bitmap.height}...")
             val results = detection.process(bitmap)
             Log.v("TextDetector", "Got: $results")
             states.put(page, PageState(bitmap, results))
         }
     }
 
-    private suspend fun ReaderPage.loadBitmap(): Bitmap? {
+    private suspend fun ReaderPage.loadBitmap(config: PagerConfig, view: View): Bitmap? {
         if (status != Page.State.Ready) {
             statusFlow.firstOrNull { it == Page.State.Ready }
         }
@@ -153,6 +161,11 @@ class TextDetector(
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
             .allowHardware(false)
+            .precision(Precision.INEXACT)
+            .size(ViewSizeResolver(view))
+            .cropBorders(config.imageCropBorders)
+            .customDecoder(true)
+            .crossfade(false)
         val image = when (val result = context.imageLoader.execute(request.build())) {
             is SuccessResult -> result.image
             else -> {
