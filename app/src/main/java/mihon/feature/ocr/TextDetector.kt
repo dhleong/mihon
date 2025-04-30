@@ -47,6 +47,7 @@ class TextDetector(
     activity: ReaderActivity,
     private val scope: LifecycleCoroutineScope,
     lifecycle: Lifecycle,
+    private val eagerOCR: Boolean = false,
     private val language: String = "jp" // TODO
 ) {
     companion object {
@@ -206,6 +207,11 @@ class TextDetector(
             Log.v("TextDetector", "Got: $results")
             val state = PageState.Pending(bitmap, results)
             states.put(page, state)
+
+            if (!eagerOCR) {
+                Log.v("TextDetector", "EagerOCR disabled")
+                return@launchUI
+            }
 
             // Eagerly detect text
             for (region in state.regions) {
