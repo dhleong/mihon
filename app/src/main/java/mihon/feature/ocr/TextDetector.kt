@@ -13,6 +13,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import coil3.request.bitmapConfig
 import coil3.request.crossfade
 import coil3.size.Precision
 import coil3.size.ViewSizeResolver
@@ -244,6 +245,7 @@ class TextDetector(
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
             .allowHardware(false)
+            .bitmapConfig(Bitmap.Config.RGB_565)
             .precision(Precision.INEXACT)
             .size(ViewSizeResolver(view))
             .cropBorders(config.imageCropBorders)
@@ -256,6 +258,10 @@ class TextDetector(
                 return null
             }
         }
-        return image.toBitmap()
+        return image.toBitmap(
+            width = image.width,
+            height = image.height,
+            config = Bitmap.Config.RGB_565,
+        )
     }
 }
