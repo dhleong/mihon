@@ -220,10 +220,10 @@ class TextDetector(
             }
 
             // NOTE: By switching to a FullyScanned we release the reference to the bitmap
-            // we loaded, enabling the memory to be freed. We *may* be able to eagerly recycle(),
-            // but keeping this simple for now to avoid accidents---the GC should catch it
+            // we loaded, enabling the memory to be freed.
             Log.v("TextDetector", "Fully scanned $page / ${page.number}")
             states.put(page, PageState.FullyScanned(results))
+            state.bitmap.recycle()
         }
     }
 
