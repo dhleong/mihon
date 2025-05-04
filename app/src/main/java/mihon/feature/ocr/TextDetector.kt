@@ -251,7 +251,6 @@ class TextDetector(
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
             .allowHardware(false)
-            .bitmapConfig(Bitmap.Config.RGB_565)
             .precision(Precision.INEXACT)
             .size(ViewSizeResolver(view))
             .cropBorders(config.imageCropBorders)
@@ -267,7 +266,6 @@ class TextDetector(
         return image.toBitmap(
             width = image.width,
             height = image.height,
-            config = Bitmap.Config.RGB_565,
         )
     }
 }
