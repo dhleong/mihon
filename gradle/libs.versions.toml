@@ -104,7 +104,7 @@ ktlint-core = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlin
 markdown-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdown" }
 markdown-coil = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3", version.ref = "markdown" }
 
-manga-ocr = { module = "com.github.dhleong:manga-ocr-android", version = "1d4e5f12ba" }
+manga-ocr = { module = "com.github.dhleong:manga-ocr-android", version = "276d6e06f4" }
 
 [plugins]
 google-services = { id = "com.google.gms.google-services", version = "4.4.2" }
