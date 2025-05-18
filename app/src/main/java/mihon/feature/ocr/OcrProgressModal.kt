@@ -27,7 +27,9 @@ fun OcrProgressModal(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp))
             }
-            Text(text.text)
+            if (text.text.isNotBlank()) {
+                Text(text.text)
+            }
         }
     }
 }
