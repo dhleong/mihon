@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 
@@ -24,7 +25,7 @@ interface Viewer {
     /**
      * Tells this viewer to set the given [chapters] as active.
      */
-    fun setChapters(chapters: ViewerChapters)
+    fun setChapters(source: Source, chapters: ViewerChapters)
 
     /**
      * Tells this viewer to move to the given [page].

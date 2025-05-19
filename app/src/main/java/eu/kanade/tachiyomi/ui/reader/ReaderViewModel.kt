@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
@@ -289,14 +290,16 @@ class ReaderViewModel @JvmOverloads constructor(
     private suspend fun init() {
         withIOContext {
             try {
-                val manga = getManga.await(mangaId) ?: error("Requested manga of id $mangaId not found")
-                sourceManager.isInitialized.first { it }
-                mutableState.update { it.copy(manga = manga) }
-                if (chapterId == -1L) chapterId = initialChapterId
+                val manga = getManga.await(mangaId)
+                if (manga != null) {
+                    sourceManager.isInitialized.first { it }
+                    val source = sourceManager.getOrStub(manga.source)
 
-                val context = Injekt.get<Application>()
-                val source = sourceManager.getOrStub(manga.source)
-                loader = ChapterLoader(context, downloadManager, downloadProvider, manga, source)
+                    mutableState.update { it.copy(manga = manga, source = source) }
+                    if (chapterId == -1L) chapterId = initialChapterId
+
+                    val context = Injekt.get<Application>()
+                    loader = ChapterLoader(context, downloadManager, downloadProvider, manga, source)
 
                 loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id })
             } catch (e: Throwable) {
@@ -980,6 +983,7 @@ class ReaderViewModel @JvmOverloads constructor(
     data class State(
         val manga: Manga? = null,
         val initError: Throwable? = null,
+        val source: Source? = null,
         val viewerChapters: ViewerChapters? = null,
         val bookmarked: Boolean = false,
         val isLoadingAdjacentChapter: Boolean = false,

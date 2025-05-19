@@ -13,7 +13,6 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
-import coil3.request.bitmapConfig
 import coil3.request.crossfade
 import coil3.size.Precision
 import coil3.size.ViewSizeResolver
@@ -31,29 +30,29 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.dhleong.mangaocr.DetectorManager
+import mihon.feature.ocr.mangaocr.MangaOcrAndroidOcr
+import mihon.feature.ocr.model.ConfiguredOcrFactory
+import mihon.feature.ocr.model.Ocr
 import net.dhleong.mangaocr.MangaOcr
-import net.dhleong.mangaocr.MangaOcrManager
 import okio.Buffer
+import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchUI
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.lang.withUIContext
 
 class TextDetector(
     activity: ReaderActivity,
     private val scope: LifecycleCoroutineScope,
-    lifecycle: Lifecycle,
+    private val lifecycle: Lifecycle,
     private val eagerOCR: Boolean = false,
-    private val language: String = "jp" // TODO
+    private var language: String = ""
 ) {
-    companion object {
-        private val SUPPORTED_LANGUAGES = setOf("jp")
-    }
-
     private class RegionState(
         val rect: RectF,
         val ocr: MutableStateFlow<MangaOcr.Result?> = MutableStateFlow(null),
@@ -67,10 +66,18 @@ class TextDetector(
         ) : PageState
     }
 
+    // TODO: Injekt
+    private val factories = listOf(
+        ConfiguredOcrFactory(
+            MangaOcrAndroidOcr.Factory,
+            mayBeUsedForOther = true,
+        )
+    )
+    private var selectedFactory: ConfiguredOcrFactory? = null
+
     private val context = activity.applicationContext
     private val viewModel = activity.viewModel
-    private val ocr = MangaOcrManager(context, scope, lifecycle)
-    private val detection = DetectorManager(context, scope, lifecycle)
+    private var ocr = MutableStateFlow<Ocr?>(null)
 
     private val job = SupervisorJob()
     private var lastActiveJob: Job? = null
@@ -81,7 +88,7 @@ class TextDetector(
 
     @MainThread
     fun detectText(view: View, viewX: Float, viewY: Float): Boolean {
-        if (language !in SUPPORTED_LANGUAGES) {
+        if (selectedFactory == null) {
             return false
         }
 
@@ -151,38 +158,35 @@ class TextDetector(
             return
         }
 
+        val ocr = getOcr() ?: return
+
         val bitmap = (page as? PageState.Pending)?.bitmap
             ?: throw IllegalStateException("FullyScanned page should not have any null OCR values")
-
-        val croppedBitmap = Bitmap.createBitmap(
-            page.bitmap,
-            region.rect.left.toInt(),
-            region.rect.top.toInt(),
-            region.rect.width().toInt(),
-            region.rect.height().toInt(),
-        )
 
         // Show progress right away
         onEmit(MangaOcr.Result.Partial(""))
 
-        ocr.process(croppedBitmap)
+        ocr.extractText(bitmap, region.rect)
             .collect { value ->
                 region.ocr.value = value
                 onEmit(value)
             }
-
-        if (croppedBitmap !== bitmap) {
-            croppedBitmap.recycle()
-        }
     }
 
     fun onPageSelected(config: PagerConfig, view: View, page: ReaderPage) {
         Log.v("TextDetector", "onPageSelected ($page / ${page.number})")
         currentPage = page
 
-        if (language in SUPPORTED_LANGUAGES) {
+        if (selectedFactory != null) {
             scanPageForRegions(config, view, page)
         }
+    }
+
+    private suspend fun getOcr(): Ocr? {
+        if (selectedFactory == null) {
+            return null
+        }
+        return ocr.first()
     }
 
     private fun scanPageForRegions(config: PagerConfig, view: View, page: ReaderPage) {
@@ -194,6 +198,8 @@ class TextDetector(
                 return@launchUI
             }
 
+            val ocr = getOcr() ?: return@launchUI
+
             val bitmap = page.loadBitmap(config, view)
             if (bitmap == null) {
                 Log.v("TextDetector", "Failed to load bitmap for $page")
@@ -201,7 +207,7 @@ class TextDetector(
             }
 
             Log.v("TextDetector", "Process ($page / ${page.number}) @ ${bitmap.width} / ${bitmap.height}...")
-            val results = detection.process(bitmap).map {
+            val results = ocr.detectTextRegions(bitmap).map {
                 RegionState(it.bbox.rect)
             }
             Log.v("TextDetector", "Got: $results")
@@ -267,5 +273,31 @@ class TextDetector(
             width = image.width,
             height = image.height,
         )
+    }
+
+    fun setLanguage(lang: String) {
+        Log.v("TextDetector", "setLanguage($lang)")
+        language = lang
+        val factory = factories.firstOrNull { configured ->
+            lang == "other" && configured.mayBeUsedForOther
+                || lang in configured.factory.getSupportedLanguages()
+        }
+        Log.v("TextDetector", "setLanguage($lang); selected ${factory?.factory}")
+
+        if (factory == selectedFactory) {
+            // NOP: language did not change
+            return
+        }
+
+        selectedFactory = factory
+        if (factory != null) {
+            scope.launchIO {
+                Log.v("TextDetector", "Initializing ${factory.factory}")
+                val newOcr = factory.factory.create(context, scope, lifecycle)
+                withUIContext {
+                    ocr.value = newOcr
+                }
+            }
+        }
     }
 }
