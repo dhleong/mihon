@@ -33,12 +33,18 @@ class MangaOcrAndroidOcr(
         detection.process(bitmap)
 
     override suspend fun extractText(bitmap: Bitmap, region: RectF): Flow<MangaOcr.Result> {
+        val left = region.left.toInt().coerceAtLeast(0)
+        val top = region.top.toInt().coerceAtLeast(0)
         val croppedBitmap = Bitmap.createBitmap(
             bitmap,
-            region.left.toInt(),
-            region.top.toInt(),
-            region.width().toInt(),
-            region.height().toInt(),
+            left,
+            top,
+            region.width().toInt().coerceAtMost(
+                bitmap.width - left,
+            ),
+            region.height().toInt().coerceAtMost(
+                bitmap.height - top,
+            ),
         )
 
         return ocr.process(croppedBitmap).onCompletion {
