@@ -108,7 +108,7 @@ markdown-coil = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3",
 
 stringSimilarity = { module = "com.aallam.similarity:string-similarity-kotlin", version = "0.1.0" }
 
-manga-ocr = { module = "com.github.dhleong:manga-ocr-android", version = "07194d9c8a" }
+manga-ocr = { module = "com.github.dhleong:manga-ocr-android", version = "c465935459" }
 
 [plugins]
 google-services = { id = "com.google.gms.google-services", version = "4.4.3" }
