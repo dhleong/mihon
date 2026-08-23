@@ -301,7 +301,8 @@ class ReaderViewModel @JvmOverloads constructor(
                     val context = Injekt.get<Application>()
                     loader = ChapterLoader(context, downloadManager, downloadProvider, manga, source)
 
-                loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id })
+                    loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id })
+                }
             } catch (e: Throwable) {
                 if (e is CancellationException) {
                     throw e

@@ -73,10 +73,7 @@ class PagerConfig(
         readerPreferences.landscapeZoom
             .register({ landscapeZoom = it }, { imagePropertyChangedListener?.invoke() })
 
-        // TODO: OCR preference
-        isHardwareBitmapEnabled = false
-
-        readerPreferences.navigationModePager()
+        readerPreferences.navigationModePager
             .register({ navigationMode = it }, { updateNavigation(navigationMode) })
 
         readerPreferences.pagerNavInverted
